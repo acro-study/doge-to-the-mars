@@ -1,9 +1,6 @@
 (function () {
-    var container = document.querySelector('.container');
     var playBtn = document.getElementById('play-btn');
-    var stopBtn = document.getElementById('stop-btn');
-    var fullScreenBtn = document.getElementById('full-screen-btn');
-    var closeFullScreenBtn = document.getElementById('close-full-screen-btn');
+    var pauseBtn = document.getElementById('pause-btn');
     var scoreText = document.getElementById('score-text');
     var gameoverOverlay = document.getElementById('gameover-overlay');
     var canvas = document.getElementById('canvas');
@@ -80,10 +77,11 @@
             ctx.restore();
         }
         move() {
-            if (this.direction > 0 && this.y < canvas.height - this.height) {
-                this.y += (this.dy * this.direction);
-            } else if (this.direction < 0 && this.y > 0) {
-                this.y += (this.dy * this.direction);
+            this.y += (this.dy * this.direction);
+            if (this.y >= canvas.height - this.height) {
+                this.y = canvas.height - this.height;
+            } else if (this.y <= 0) {
+                this.y = 0;
             }
             this.degree = 5 * this.direction;
         }
@@ -144,36 +142,13 @@
         return Math.floor(Math.random() * (max - min)) + min;
     }
 
-    function fullScreen(element) {
-        if (element.requestFullscreen) {
-            element.requestFullscreen();
-        } else if (element.webkitRequestFullscreen) { /* Safari */
-            element.webkitRequestFullscreen();
-        } else if (element.msRequestFullscreen) { /* IE11 */
-            element.msRequestFullscreen();
-        }
-    }
-
-    function closeFullscreen() {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        } else if (document.webkitExitFullscreen) { /* Safari */
-            document.webkitExitFullscreen();
-        } else if (document.msExitFullscreen) { /* IE11 */
-            document.msExitFullscreen();
-        }
-    }
-    
-    function throttle (callback, limit) {
-        var wait = false;
-        return function () {
-            if (!wait) {
-                callback.call();
-                wait = true;
-                setTimeout(function () {
-                    wait = false;
-                }, limit);
-            }
+    function debounce(func, delay) {
+        let clearTimer;
+        return function() {
+            const context = this;
+            const args = arguments;
+            clearTimeout(clearTimer);
+            clearTimer = setTimeout(() => func.apply(context, args), delay);
         }
     }
 
@@ -184,10 +159,12 @@
 
         // draw background
         ctx.save();
-        ctx.drawImage(bgImage, -bgShift, 0, canvas.width, canvas.height);
-        ctx.drawImage(bgImage, canvas.width - bgShift, 0, canvas.width, canvas.height);
+        var bgWidth = Math.max(canvas.width, canvas.height * (16/9));
+        var bgHeight = Math.max(canvas.height, canvas.width * (9/16));
+        ctx.drawImage(bgImage, -bgShift, 0, bgWidth, bgHeight);
+        ctx.drawImage(bgImage, bgWidth - bgShift, 0, bgWidth, bgHeight);
         ctx.restore();
-        bgShift = (bgShift + speed / 4) % canvas.width;
+        bgShift = (bgShift + speed / 4) % bgWidth;
 
         if (timer % 60 === 0) {
             scoreText.innerHTML = score++;
@@ -233,7 +210,7 @@
     }
 
     // Set window resize callback with throttle
-    window.addEventListener("resize", throttle(function () {
+    window.addEventListener("resize", debounce(function () {
         var rect = canvas.getBoundingClientRect();
         canvas.width = rect.width;
         canvas.height = rect.height;
@@ -243,33 +220,34 @@
         objects.forEach(function(o) {
             o.resize();
         })
-    }, 100), false);
+
+        // TODO: calc speed dynamically
+        maxSpeed = canvas.width / 80;
+        speed = maxSpeed / 3;
+    }, 200), false);
 
 
     // Set button click events
     playBtn.addEventListener('click', function () {
-        loop();
         this.classList.add('hidden');
-        stopBtn.classList.remove('hidden');
+        pauseBtn.classList.remove('hidden');
+        loop();
     })
-    stopBtn.addEventListener('click', function () {
-        cancelAnimationFrame(animation);
+    pauseBtn.addEventListener('click', function () {
         this.classList.add('hidden');
         playBtn.classList.remove('hidden');
-    })
-    fullScreenBtn.addEventListener('click', function () {
-        fullScreen(container);
-        this.classList.add('hidden');
-        closeFullScreenBtn.classList.remove('hidden');
-    })
-    closeFullScreenBtn.addEventListener('click', function () {
-        closeFullscreen(container);
-        this.classList.add('hidden');
-        fullScreenBtn.classList.remove('hidden');
+        cancelAnimationFrame(animation)
     })
 
+    // For hides the address bar on mobile
+    window.addEventListener("load",function() {
+        setTimeout(function(){
+            window.scrollTo(0, 1);
+        }, 0);
+    });
 
     // Init and start animation loop
     doge = new Doge();
     loop();
+    window.dispatchEvent(new Event('resize'));
 })()
