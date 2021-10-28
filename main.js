@@ -1,4 +1,11 @@
 (function () {
+    var container = document.querySelector('.container');
+    var playBtn = document.getElementById('play-btn');
+    var stopBtn = document.getElementById('stop-btn');
+    var fullScreenBtn = document.getElementById('full-screen-btn');
+    var closeFullScreenBtn = document.getElementById('close-full-screen-btn');
+    var scoreText = document.getElementById('score-text');
+    var gameoverOverlay = document.getElementById('gameover-overlay');
     var canvas = document.getElementById('canvas');
     var ctx = canvas.getContext('2d');
 
@@ -20,12 +27,15 @@
 
     class Unit {
         constructor() {
-            this.width = canvas.width / 20;
-            this.height = this.width;
+            this.resize()
             this.x = canvas.width - this.width;
             this.y = canvas.height - this.height;
             this.dx = 0;
             this.dy = 0;
+        }
+        resize() {
+            this.width = canvas.width / 20;
+            this.height = this.width;
         }
     }
 
@@ -44,8 +54,6 @@
     class Doge extends Unit {
         constructor() {
             super();
-            this.width = canvas.width / 8;
-            this.height = this.width / 2;
             this.x = 10;
             this.y = 0;
             this.dy = speed;
@@ -61,7 +69,6 @@
                     }
                 })
                 document.addEventListener('click', () => doge.toggleDirection())
-                document.addEventListener('touchend', () => doge.toggleDirection())
             })(this)
         }
         draw() {
@@ -83,15 +90,16 @@
         toggleDirection() {
             this.direction *= -1;
         }
-        speedUp() {
-            this.dy = speed;
-        }
         collisionDetect(unit) {
             var xDiff = unit.x - (this.x + this.width);
             var yBottomDiff = unit.y - (this.y + this.height);
             var yTopDiff = this.y - (unit.y + unit.height);
             if (xDiff < 0 && yBottomDiff < 0 && yTopDiff < 0) return true;
             return false;
+        }
+        resize() {
+            this.width = canvas.width / 8;
+            this.height = this.width / 2;
         }
     }
 
@@ -136,35 +144,37 @@
         return Math.floor(Math.random() * (max - min)) + min;
     }
 
-    function drawScore() {
-        ctx.save();
-        ctx.font = `${canvas.width / 30}px Arial`;
-        ctx.fillStyle = "white";
-        ctx.textBaseline = 'top';
-        ctx.textAlign = 'right';
-        ctx.fillText('score: ' + score, canvas.width - 20, 20);
-        ctx.restore();
+    function fullScreen(element) {
+        if (element.requestFullscreen) {
+            element.requestFullscreen();
+        } else if (element.webkitRequestFullscreen) { /* Safari */
+            element.webkitRequestFullscreen();
+        } else if (element.msRequestFullscreen) { /* IE11 */
+            element.msRequestFullscreen();
+        }
     }
 
-    function drawBackground() {
-        ctx.save();
-        ctx.drawImage(bgImage, -bgShift, 0, canvas.width, canvas.height);
-        ctx.drawImage(bgImage, canvas.width - bgShift, 0, canvas.width, canvas.height);
-        ctx.restore();
+    function closeFullscreen() {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) { /* Safari */
+            document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) { /* IE11 */
+            document.msExitFullscreen();
+        }
     }
-
-    function drawEnding() {
-        ctx.save();
-        ctx.fillStyle = "white";
-        ctx.font = `${canvas.width / 20}px Arial`;
-        ctx.textBaseline = 'bottom';
-        ctx.textAlign = 'center';
-        ctx.fillText("Game over", canvas.width/2, canvas.height/2);
-        ctx.font = `${canvas.width / 40}px Arial`;
-        ctx.textBaseline = 'top';
-        ctx.textAlign = 'center';
-        ctx.fillText("click/tab for restart", canvas.width/2, canvas.height/2);
-        ctx.restore();
+    
+    function throttle (callback, limit) {
+        var wait = false;
+        return function () {
+            if (!wait) {
+                callback.call();
+                wait = true;
+                setTimeout(function () {
+                    wait = false;
+                }, limit);
+            }
+        }
     }
 
     function loop() {
@@ -172,13 +182,15 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         timer++;
 
-        drawBackground();
-        drawScore();
-
+        // draw background
+        ctx.save();
+        ctx.drawImage(bgImage, -bgShift, 0, canvas.width, canvas.height);
+        ctx.drawImage(bgImage, canvas.width - bgShift, 0, canvas.width, canvas.height);
+        ctx.restore();
         bgShift = (bgShift + speed / 4) % canvas.width;
 
         if (timer % 60 === 0) {
-            score++;
+            scoreText.innerHTML = score++;
         }
 
         if (timer % (120 + getRandomInt(-10, 10)) === 0) {
@@ -190,8 +202,7 @@
         }
 
         if (timer % 1000 === 0 && speed <= maxSpeed) {
-            speed++;
-            doge.speedUp();
+            doge.dy = speed++;
         }
 
         objects.forEach((object, e, i) => {
@@ -207,10 +218,10 @@
                     object.visible = false;
                 } else if (object instanceof Obstacle) {
                     cancelAnimationFrame(animation);
-                    drawEnding();
+                    gameoverOverlay.classList.remove('hidden')
+                    gameoverOverlay.classList.add('flex')
                     document.addEventListener('keydown', () => window.location.reload())
                     document.addEventListener('click', () => window.location.reload())
-                    document.addEventListener('touchend', () => window.location.reload())
                 }
             }
             object.move();
@@ -221,6 +232,44 @@
         doge.draw();
     }
 
+    // Set window resize callback with throttle
+    window.addEventListener("resize", throttle(function () {
+        var rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        // update unit size
+        doge.resize();
+        objects.forEach(function(o) {
+            o.resize();
+        })
+    }, 100), false);
+
+
+    // Set button click events
+    playBtn.addEventListener('click', function () {
+        loop();
+        this.classList.add('hidden');
+        stopBtn.classList.remove('hidden');
+    })
+    stopBtn.addEventListener('click', function () {
+        cancelAnimationFrame(animation);
+        this.classList.add('hidden');
+        playBtn.classList.remove('hidden');
+    })
+    fullScreenBtn.addEventListener('click', function () {
+        fullScreen(container);
+        this.classList.add('hidden');
+        closeFullScreenBtn.classList.remove('hidden');
+    })
+    closeFullScreenBtn.addEventListener('click', function () {
+        closeFullscreen(container);
+        this.classList.add('hidden');
+        fullScreenBtn.classList.remove('hidden');
+    })
+
+
+    // Init and start animation loop
     doge = new Doge();
-    loop(); // start loop
+    loop();
 })()
